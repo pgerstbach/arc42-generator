@@ -1,0 +1,76 @@
+# Runs the full build with the supported Docker setup and publishes the
+# generated distributions as a workflow artifact.
+#
+# Purpose: compare generator output before and after changes in a
+# reproducible environment. Lives on ci/* branches of this fork only and is
+# not part of any upstream pull request.
+
+name: Docker build
+
+on:
+  push:
+    branches: ['ci/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build Docker image
+        run: docker compose build
+
+      - name: Run generator
+        run: |
+          docker compose run -T --rm arc42-builder \
+            bash -c './build-arc42.sh 2>&1 | tee build.log; exit ${PIPESTATUS[0]}'
+
+      - name: Collect build metadata
+        if: always()
+        run: |
+          {
+            echo "generator:      $(git rev-parse HEAD)"
+            echo "arc42-template: $(git -c safe.directory='*' -C arc42-template rev-parse HEAD 2>/dev/null || echo n/a)"
+            docker compose run -T --rm arc42-builder \
+              sh -c 'pandoc --version | head -1; groovy --version; java -version 2>&1 | head -1' || true
+          } > build-info.txt
+          cat build-info.txt
+
+      # build-arc42.sh re-clones arc42-template, so every file in dist/ has a
+      # fresh mtime. Git status is the reliable signal: only ZIPs rewritten
+      # by this build show up as modified or untracked.
+      - name: Collect distributions
+        if: always()
+        run: |
+          mkdir -p out/dist
+          git -c safe.directory='*' -C arc42-template ls-files -m -o --exclude-standard -- dist \
+            | grep '\.zip$' > out/dist-files.txt || true
+          while read -r f; do cp "arc42-template/$f" out/dist/; done < out/dist-files.txt
+          cp build.log build-info.txt out/ 2>/dev/null || true
+          {
+            echo "### Docker build"
+            echo '```'
+            cat build-info.txt
+            echo '```'
+            echo "Generated ZIPs: $(wc -l < out/dist-files.txt)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist-${{ github.sha }}
+          path: out/
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: warn
