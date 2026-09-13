@@ -29,9 +29,12 @@ NESTED_ARCHIVES = (".docx", ".epub")
 # Each rule: description, entry globs it applies to, pattern, replacement.
 # Keep these narrow - anything not listed here counts as a real difference.
 NOISE_RULES = [
-    ("html: asciidoctor 'Last updated' footer", ("*.html",),
-     re.compile(rb"Last updated \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [A-Z0-9:+-]+"),
-     rb"Last updated <TIMESTAMP>"),
+    # The label is localised ("Last updated", "最后更新", ...), so match the
+    # timestamp inside asciidoctor's footer block instead of the label.
+    ("html: asciidoctor footer timestamp", ("*.html",),
+     re.compile(rb'(<div id="footer-text">(?:(?!</div>).)*?)'
+                rb"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [A-Z0-9:+-]+", re.S),
+     rb"\1<TIMESTAMP>"),
     ("docx: created/modified date", ("docProps/core.xml",),
      re.compile(rb"(<dcterms:(?:created|modified)[^>]*>)[^<]*"),
      rb"\1<TIMESTAMP>"),
