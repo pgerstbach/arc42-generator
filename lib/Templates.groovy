@@ -1,5 +1,7 @@
 #!/usr/bin/env groovy
 
+import java.util.regex.Pattern
+
 /**
  * Templates.groovy - Golden Master processing and template generation
  *
@@ -74,16 +76,19 @@ class Templates {
     }
     String removeFeatures(String template, List<String> featuresToRemove) {
         def result = template
+        def prefix = config.project.featurePrefix
 
-        // Remove role-based feature blocks: [role="arc42<feature>"] **** ... ****
+        // Remove role-based feature blocks: [role="<prefix><feature>"] **** ... ****
         featuresToRemove.each { feature ->
-            result = result.replaceAll(/(?ms)\[role="arc42${feature}"\][ \r\n]+[*]{4}.*?[*]{4}/, '')
+            def marker = Pattern.quote("${prefix}${feature}")
+            result = result.replaceAll(/(?ms)\[role="${marker}"\][ \r\n]+[*]{4}.*?[*]{4}/, '')
         }
 
         // Remove ifdef/endif blocks for help feature
         if ('help' in featuresToRemove) {
-            result = result.replaceAll(/(?ms)ifdef::arc42help\[\]/, '')
-            result = result.replaceAll(/(?ms)endif::arc42help\[\]/, '')
+            def helpMarker = Pattern.quote("${prefix}help")
+            result = result.replaceAll(/(?ms)ifdef::${helpMarker}\[\]/, '')
+            result = result.replaceAll(/(?ms)endif::${helpMarker}\[\]/, '')
         }
 
         return result
@@ -113,14 +118,15 @@ class Templates {
 
         if (templateName == 'plain') {
             // Only copy the logo
-            def logoSource = imageFiles?.find { it.name == 'arc42-logo.png' }
+            String logo = config.project.logo
+            def logoSource = imageFiles?.find { it.name == logo }
 
             if (logoSource) {
-                def logoTarget = new File(imagesTarget, 'arc42-logo.png')
+                def logoTarget = new File(imagesTarget, logo)
                 logoTarget.bytes = logoSource.bytes
-                println "  ✓ Copied arc42-logo.png"
+                println "  ✓ Copied ${logo}"
             } else {
-                println "  ⚠ Warning: arc42-logo.png not found"
+                println "  ⚠ Warning: ${logo} not found"
             }
         } else {
             // Copy all images for with-help style
@@ -137,7 +143,7 @@ class Templates {
      * Main method: Create templates from Golden Master
      *
      * New Structure (arc42-template):
-     * - <LANG>/arc42-template.adoc (main template file)
+     * - <LANG>/<project name>.adoc (main template file)
      * - <LANG>/adoc/ (individual sections)
      * - <LANG>/images/ (images)
      * - <LANG>/version.properties
@@ -209,8 +215,8 @@ class Templates {
 
                 println "  Style: ${templateName} (removing features: ${featuresToRemove ?: 'none'})"
 
-                // Process main template file: <LANG>/arc42-template.adoc
-                def mainTemplateSource = new File(goldenMasterLangDir, 'arc42-template.adoc')
+                // Process main template file: <LANG>/<project name>.adoc
+                def mainTemplateSource = new File(goldenMasterLangDir, "${config.project.name}.adoc")
                 def processedCount = 0
 
                 if (mainTemplateSource.exists()) {

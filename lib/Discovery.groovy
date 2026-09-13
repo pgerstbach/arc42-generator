@@ -104,8 +104,9 @@ class Discovery {
                     return
                 }
 
-                // Find main template file (usually arc42-template.adoc or similar)
-                def mainFile = adocFiles.find { it.name.toLowerCase().contains('arc42-template') }
+                // Find main template file: <project name>.adoc
+                String mainFileName = "${config.project.name}.adoc"
+                def mainFile = adocFiles.find { it.name == mainFileName }
                 if (!mainFile) {
                     // Fallback: use first .adoc file
                     mainFile = adocFiles[0]
